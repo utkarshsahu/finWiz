@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://<user>:<pass>@cluster.mongodb.net")
-DB_NAME = os.getenv("DB_NAME", "finance_agent")
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("DB_NAME")
 
 # Module-level client reference — set once during init_db(), reused after
 _client = None
