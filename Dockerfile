@@ -20,11 +20,3 @@ RUN pip install --no-deps pdfplumber
 
 # Copy the rest of the application code
 COPY . .
-
-# Expose the port (Railway uses this internally)
-EXPOSE 8000
-
-# Start the application
-# Note: Using the ${PORT:-8000} syntax to handle Railway's dynamic port assignment
-CMD uvicorn main:app --host 0.0.0.0 --port $PORT
-
