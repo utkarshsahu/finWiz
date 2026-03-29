@@ -26,4 +26,4 @@ EXPOSE 8000
 
 # Start the application
 # Note: Using the ${PORT:-8000} syntax to handle Railway's dynamic port assignment
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
