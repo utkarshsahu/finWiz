@@ -4,7 +4,7 @@ app/main.py
 FastAPI application entry point.
 
 Run with:
-    uvicorn app.main:app --reload --port 8000
+    uvicorn main:app --reload --port 8000
 """
 
 import logging
@@ -51,6 +51,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
+
 from routes.zerodha_router import router as zerodha_router
 from routes.market_data_router import router as market_data_router
 from routes.documents_router import router as documents_router
@@ -60,6 +61,7 @@ from routes.research_router import router as research_router
 from routes.recommendations_router import router as recommendations_router
 from routes.telegram_router import router as telegram_router
 
+"""
 app.include_router(zerodha_router)
 app.include_router(market_data_router)
 app.include_router(documents_router)
@@ -68,7 +70,7 @@ app.include_router(rules_router)
 app.include_router(research_router)
 app.include_router(recommendations_router)
 app.include_router(telegram_router)
-
+"""
 
 @app.get("/health")
 async def health():
