@@ -18,7 +18,7 @@ import certifi
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
-from app.models.instruments import Instrument, AssetClass, SubClass, Exchange
+from models.instruments import Instrument, AssetClass, SubClass, Exchange
 
 
 INSTRUMENTS_TO_SEED = [
@@ -92,18 +92,18 @@ INSTRUMENTS_TO_SEED = [
 
 
 async def seed():
-    from app.models.accounts import Account
-    from app.models.holdings import Holding
-    from app.models.transactions import Transaction
-    from app.models.prices import PriceSnapshot
-    from app.models.goals import Goal, GoalAllocation
-    from app.models.cashflows import Cashflow
-    from app.models.documents import FinancialDocument
-    from app.models.signals import Signal
-    from app.models.recommendations import Recommendation
-    from app.models.research import ResearchItem
-    from app.models.policies import PolicyRule
-    from app.models.zerodha_token import ZerodhaToken
+    from models.accounts import Account
+    from models.holdings import Holding
+    from models.transactions import Transaction
+    from models.prices import PriceSnapshot
+    from models.goals import Goal, GoalAllocation
+    from models.cashflows import Cashflow
+    from models.documents import FinancialDocument
+    from models.signals import Signal
+    from models.recommendations import Recommendation
+    from models.research import ResearchItem
+    from models.policies import PolicyRule
+    from models.zerodha_token import ZerodhaToken
 
     client = AsyncIOMotorClient(
         os.getenv("MONGO_URI"),

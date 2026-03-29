@@ -15,19 +15,19 @@ load_dotenv()
 async def seed():
     from motor.motor_asyncio import AsyncIOMotorClient
     from beanie import init_beanie
-    from app.models.policies import PolicyRule, PolicyRuleType, DEFAULT_POLICIES
-    from app.models.accounts import Account
-    from app.models.holdings import Holding
-    from app.models.instruments import Instrument
-    from app.models.transactions import Transaction
-    from app.models.prices import PriceSnapshot
-    from app.models.goals import Goal, GoalAllocation
-    from app.models.cashflows import Cashflow
-    from app.models.documents import FinancialDocument
-    from app.models.signals import Signal
-    from app.models.recommendations import Recommendation
-    from app.models.research import ResearchItem
-    from app.models.zerodha_token import ZerodhaToken
+    from models.policies import PolicyRule, PolicyRuleType, DEFAULT_POLICIES
+    from models.accounts import Account
+    from models.holdings import Holding
+    from models.instruments import Instrument
+    from models.transactions import Transaction
+    from models.prices import PriceSnapshot
+    from models.goals import Goal, GoalAllocation
+    from models.cashflows import Cashflow
+    from models.documents import FinancialDocument
+    from models.signals import Signal
+    from models.recommendations import Recommendation
+    from models.research import ResearchItem
+    from models.zerodha_token import ZerodhaToken
 
     client = AsyncIOMotorClient(os.getenv("MONGO_URI"), tls=True, tlsCAFile=certifi.where())
     await init_beanie(
