@@ -67,11 +67,17 @@ class PriceFetchResult:
         ticker: str,
         price: Optional[float],
         price_date: Optional[date],
+        sector: Optional[str] = None, # Added field
+        industry: Optional[str] = None, # Added field
+        company_name: Optional[str] = None, # Added field
         error: Optional[str] = None,
     ):
         self.ticker = ticker
         self.price = price
         self.price_date = price_date
+        self.sector = sector
+        self.industry = industry
+        self.company_name = company_name
         self.error = error
         self.success = price is not None and price > 0
 
@@ -204,27 +210,38 @@ async def _fetch_nse_equity(symbol: str) -> PriceFetchResult:
         data = await session.get_json(url)
 
     if not data:
-        return PriceFetchResult(symbol, None, None, "No data from NSE")
+        return PriceFetchResult(symbol, None, None, error="No data from NSE")
 
+    # --- Extract Price ---
     price_info = data.get("priceInfo", {})
     last_price = price_info.get("lastPrice") or price_info.get("close")
 
-    if not last_price:
-        return PriceFetchResult(
-            symbol, None, None,
-            f"No price in response. Keys: {list(price_info.keys())}"
-        )
+    # --- Extract Metadata (The Fix for your Null Sectors) ---
+    industry_info = data.get("industryInfo", {})
+    metadata = data.get("metadata", {})
+    
+    sector = industry_info.get("macro")  # e.g., "Financial Services"
+    industry = industry_info.get("industry") # e.g., "Banks"
+    company_name = metadata.get("companyName")
 
-    meta = data.get("metadata", {})
+    if not last_price:
+        return PriceFetchResult(symbol, None, None, error="No price found")
+
     try:
         trade_date = datetime.strptime(
-            meta.get("lastUpdateTime", "").split(" ")[0], "%d-%b-%Y"
+            metadata.get("lastUpdateTime", "").split(" ")[0], "%d-%b-%Y"
         ).date()
     except Exception:
         trade_date = date.today()
 
-    logger.info(f"  NSE {bare}: ₹{last_price} ({trade_date})")
-    return PriceFetchResult(symbol, float(last_price), trade_date)
+    return PriceFetchResult(
+        ticker=symbol, 
+        price=float(last_price), 
+        price_date=trade_date,
+        sector=sector,
+        industry=industry,
+        company_name=company_name
+    )
 
 
 # ---------------------------------------------------------------------------

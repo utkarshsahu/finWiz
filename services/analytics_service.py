@@ -127,6 +127,10 @@ class AnalyticsService:
         by_account: dict[str, dict] = defaultdict(
             lambda: {"value": 0.0, "invested": 0.0, "count": 0}
         )
+        by_sector: dict[str, dict] = defaultdict(
+            lambda: {"value": 0.0, "invested": 0.0, "count": 0}
+        )
+
         freshness_scores = []
 
         for holding in holdings:
@@ -152,6 +156,11 @@ class AnalyticsService:
             by_account[acc_name]["invested"] += invested_val
             by_account[acc_name]["count"] += 1
 
+            sector_name = instrument.sector or "Unknown"
+            by_sector[sector_name]["value"] += current_val
+            by_sector[sector_name]["invested"] += invested_val
+            by_sector[sector_name]["count"] += 1
+
             freshness_scores.append(account.freshness_score)
 
         unrealized_pnl = total_value - total_invested
@@ -174,6 +183,7 @@ class AnalyticsService:
             "unrealized_pnl_pct": unrealized_pnl_pct,
             "by_asset_class": dict(by_asset_class),
             "by_account": dict(by_account),
+            "by_sector": dict(by_sector),
             "holdings_count": len(holdings),
             "data_freshness": round(min(freshness_scores), 2) if freshness_scores else 0,
             "computed_at": datetime.now(timezone.utc).isoformat(),
@@ -312,8 +322,8 @@ class AnalyticsService:
 
         Checks:
           - Single holding > 10% of total portfolio
-          - Single sector > 25% of equity portion
-          - Single AMC > 40% of MF portfolio
+          - Single sector > 20% of equity portion
+          - Single AMC > 30% of MF portfolio
         """
         from models.holdings import Holding
         from models.instruments import AssetClass
@@ -349,6 +359,7 @@ class AnalyticsService:
                 })
 
             # Sector tracking (equity only)
+            # TODO: refine sector classification in instruments for better accuracy
             if instrument.asset_class == AssetClass.EQUITY:
                 equity_total += val
                 if instrument.sector:
@@ -363,7 +374,7 @@ class AnalyticsService:
         if equity_total > 0:
             for sector, val in sector_values.items():
                 sector_pct = (val / equity_total) * 100
-                if sector_pct > 25:
+                if sector_pct > 20:
                     risks.append({
                         "type": "sector_concentration",
                         "severity": "normal",
@@ -378,7 +389,7 @@ class AnalyticsService:
         if mf_total > 0:
             for amc, val in amc_values.items():
                 amc_pct = (val / mf_total) * 100
-                if amc_pct > 40:
+                if amc_pct > 30:
                     risks.append({
                         "type": "amc_concentration",
                         "severity": "normal",

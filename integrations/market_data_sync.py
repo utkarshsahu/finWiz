@@ -178,14 +178,6 @@ class MarketDataSync:
     # ---------------------------------------------------------------------------
 
     async def sync_equity_prices(self) -> dict:
-        """
-        Fetch end-of-day prices for all active equity/ETF holdings via yfinance.
-
-        Symbol mapping:
-          - Exchange = NSE → symbol + ".NS"
-          - Exchange = BSE → symbol + ".BO"
-          - Default → try NSE first
-        """
         equity_holdings = await Holding.find(Holding.is_active == True).to_list()
 
         # Build ticker → holding map
@@ -229,11 +221,29 @@ class MarketDataSync:
             await holding.fetch_link(Holding.instrument)
             instrument = holding.instrument
 
+            # 1. Update Instrument Metadata (The "Non-Dumb" Patch)
+            needs_save = False
+            if result.sector and not instrument.sector:
+                instrument.sector = result.sector
+                needs_save = True
+            
+            if result.industry and not instrument.industry:
+                instrument.industry = result.industry
+                needs_save = True
+            
+            if result.company_name and (instrument.name == instrument.symbol):
+                instrument.name = result.company_name
+                needs_save = True
+
+            if needs_save:
+                await instrument.save()
+
+            # 2. Update Price Snapshot & Holding (Your original logic)
             await self._upsert_price_snapshot(
                 instrument=instrument,
                 price=result.price,
                 price_date=result.price_date,
-                source="yfinance",
+                source="nse_direct",
             )
             await self._update_holding_price(holding, result.price, result.price_date)
             updated += 1

@@ -247,7 +247,7 @@ async def compute_portfolio_relevance(
 
     # --- Pillar 4: Goal Alignment (The 'Why') ---
     # Check if themes match High Impact categories
-    HIGH_IMPACT_THEMES = ["rate_cut", "inflation", "budget", "sebi_policy"]
+    HIGH_IMPACT_THEMES = ["rate_cut", "inflation", "budget", "sebi_policy", "rbi_policy", "nifty_valuation"]
     if any(t in themes for t in HIGH_IMPACT_THEMES):
         score += 0.2
 

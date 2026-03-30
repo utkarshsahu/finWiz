@@ -182,6 +182,7 @@ async def _process_and_store(
             processed.themes,
             processed.relevant_asset_classes,
             processed.relevant_sectors,
+            processed.sentiment
         )
     )
 
