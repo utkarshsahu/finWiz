@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 celery_app = Celery(
     "finance_agent",
-    broker=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+    broker=os.getenv("REDIS_URL"),
+    backend=os.getenv("REDIS_URL"),
 )
 
 celery_app.conf.update(
@@ -39,18 +39,18 @@ celery_app.conf.update(
     beat_schedule={
         # Daily login reminder at 7am IST
         "zerodha-login-reminder": {
-            "task": "app.tasks.zerodha_tasks.send_login_reminder",
+            "task": "tasks.zerodha_tasks.send_login_reminder",
             "schedule": 7 * 3600,  # Use crontab for production
             # In production: crontab(hour=7, minute=0)
         },
         # Daily full sync at 9:05am IST
         "zerodha-daily-sync": {
-            "task": "app.tasks.zerodha_tasks.run_daily_sync",
+            "task": "tasks.zerodha_tasks.run_daily_sync",
             "schedule": 9 * 3600 + 5 * 60,
         },
         # Afternoon price refresh after market close (3:45pm IST)
         "zerodha-price-refresh": {
-            "task": "app.tasks.zerodha_tasks.refresh_prices_only",
+            "task": "tasks.zerodha_tasks.refresh_prices_only",
             "schedule": 15 * 3600 + 45 * 60,
         },
     },
