@@ -54,3 +54,5 @@ python-multipart
 
 scipy>=1.13.0
 numpy>=1.26.0
+
+feedparser==6.0.12
