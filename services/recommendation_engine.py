@@ -42,6 +42,13 @@ Return a JSON object with exactly this structure:
       "priority_rank": 1
     }}
   ],
+  "opportunities": [
+    {{
+      "theme": "the sector or theme from research",
+      "rationale": "why this is a good addition to the current portfolio based on zero or low exposure",
+      "suggested_instruments": ["list 1-2 generic types or indices, e.g., 'Nifty IT Index ETF' or 'Defense focused MF'"]
+    }}
+  ],
   "no_action_rationale": "if top recommendation is no_action, explain why doing nothing is correct this week",
   "policy_violations": ["list any portfolio rule violations observed"],
   "belief_portfolio_contradictions": ["any contradictions between market research consumed and current portfolio positioning"],
@@ -49,7 +56,9 @@ Return a JSON object with exactly this structure:
 }}
 
 Rules:
-- Maximum 5 actions, ranked by priority (1 = highest)
+- Maximum 5 actions. 
+- STRATEGIC DISCOVERY: If a research item has a high relevance score (>0.7) and identifies a bullish sector where the portfolio has 0% exposure, create an action to 'stagger_buy' or 'rebalance_add' to capture this opportunity.
+- Reference specific research summaries to justify new 'Opportunity' entries.
 - Always include a no_action option if signals are weak
 - Be specific — reference actual fund names, percentages, rupee amounts from the data
 - If data is stale, lower confidence scores accordingly
@@ -96,9 +105,10 @@ class RecommendationEngine:
         from models.research import ResearchItem
 
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        # We prioritize higher relevance scores which now include Discovery/Gaps
         items = await ResearchItem.find(
             ResearchItem.ingested_at >= cutoff,
-            ResearchItem.portfolio_relevance_score >= 0.2,
+            ResearchItem.portfolio_relevance_score >= 0.4, # Raised threshold for digest quality
         ).sort([("portfolio_relevance_score", -1)]).limit(10).to_list()
 
         return [
@@ -236,7 +246,7 @@ class RecommendationEngine:
             try:
                 action_type_str = action_data.get("action_type", "no_action")
                 try:
-                    action_type = ActionType(action_type_str)
+                    action_type = ActionType(action_type_str.replace("-", "_").lower())
                 except ValueError:
                     action_type = ActionType.NO_ACTION
 

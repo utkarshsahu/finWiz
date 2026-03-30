@@ -99,4 +99,8 @@ python -m scripts.seed_policies
 
 ---
 
-**Would you like me to generate the `requirements.txt` based on the tech stack mentioned in the memory?**
+## Improvements added:
+
+1. **Strategic Discovery Logic**: We updated compute_portfolio_relevance to give a "Discovery Bonus" to bullish research in sectors where your AnalyticsService shows 0% exposure, effectively flagging gaps in your portfolio.
+2. **Analytics-Driven Rebalancing**: The pipeline now fuses research with your real-time Portfolio Drift and Asset Allocation data, prioritizing news that helps you move toward your target goals (e.g., boosting gold research if you are underweight in gold).
+3. **LLM "Scout" Persona**: We refined the GPT-4o classification prompt and the ActionType enum to explicitly identify NEW_SECTOR_ENTRY and STRATEGIC_DIVERSIFICATION as high-priority actionable signals.

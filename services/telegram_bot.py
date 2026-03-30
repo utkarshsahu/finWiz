@@ -234,9 +234,11 @@ async def handle_signals(chat_id: str):
 
 
 async def handle_digest(chat_id: str):
-    await _send(chat_id, "⏳ Generating your weekly digest... (~10 seconds)")
+    await _send(chat_id, "⏳ Scouting for opportunities and analyzing portfolio... (~10 seconds)")
     try:
         from services.recommendation_engine import RecommendationEngine
+        from models.recommendations import ActionType
+        
         engine = RecommendationEngine()
         result = await engine.generate_weekly_digest()
 
@@ -244,44 +246,74 @@ async def handle_digest(chat_id: str):
             await _send(chat_id, "❌ Failed to generate digest. Check API keys.")
             return
 
+        # Use our markdown formatter on narrative and dates
         lines = [
-            f"*📊 Weekly Digest — {result['week_start']}*\n",
-            f"_{result.get('market_narrative', '')}_\n",
+            f"📊 *Weekly Digest — {_format_markdown(result['week_start'])}*\n",
+            f"_{_format_markdown(result.get('market_narrative', ''))}_\n",
         ]
 
         actions = result.get("actions", [])
         if actions:
-            lines.append("*Recommended Actions:*")
+            lines.append("🚀 *Top Recommended Actions:*")
             for action in actions:
+                # 1. Determine Icon based on Type + Urgency
+                a_type = action.get("type")
                 urgency = action.get("urgency", 0)
-                emoji = "🔴" if urgency >= 0.7 else "🟡" if urgency >= 0.4 else "🟢"
+                
+                # Default urgency color
+                icon = "🔴" if urgency >= 0.7 else "🟡" if urgency >= 0.4 else "🟢"
+                
+                # Override icon for "Discovery" or specific types
+                if a_type == ActionType.NEW_SECTOR_ENTRY:
+                    icon = "✨"
+                elif "rebalance" in a_type:
+                    icon = "⚖️"
+                elif "buy" in a_type:
+                    icon = "💰"
+
+                # 2. Format Title (Highlighting New Opportunities)
+                title = action['title']
+                if a_type == ActionType.NEW_SECTOR_ENTRY:
+                    title = f"NEW OPPORTUNITY: {title}"
+
+                # 3. Build Action Block with escaped markdown
                 lines.append(
-                    f"{emoji} *{action['rank']}. {action['title']}*\n"
-                    f"   {action['rationale']}"
+                    f"{icon} *{action['rank']}. {_format_markdown(title)}*\n"
+                    f"   └ {_format_markdown(action['rationale'])}\n"
                 )
 
         violations = result.get("policy_violations", [])
         if violations:
-            lines.append("\n⚠️ *Policy Violations:*")
+            lines.append("\n🚨 *Policy Violations:*")
             for v in violations:
-                lines.append(f"  • {v}")
+                lines.append(f"  • {_format_markdown(v)}")
 
         contradictions = result.get("contradictions", [])
         if contradictions:
-            lines.append("\n🔄 *Contradictions:*")
+            lines.append("\n🔄 *Market Contradictions:*")
             for c in contradictions:
-                lines.append(f"  • {c}")
+                lines.append(f"  • {_format_markdown(c)}")
 
-        lines.append(
+        # Stale data warnings
+        stale = result.get("stale_warnings", [])
+        if stale:
+            lines.append("\n⚠️ *Data Freshness:*")
+            for s in stale:
+                lines.append(f"  • {_format_markdown(s)}")
+
+        footer = (
             f"\n_Based on {result.get('signals_used', 0)} signals "
             f"and {result.get('research_used', 0)} research items_"
         )
+        lines.append(_format_markdown(footer))
 
+        # Ensure we use the long sender for large digests
         await _send_long(chat_id, "\n".join(lines))
 
     except Exception as e:
         logger.error(f"Digest error: {e}")
-        await _send(chat_id, f"❌ Error generating digest: {e}")
+        # Escape the error message itself just in case
+        await _send(chat_id, f"❌ Error generating digest: {_format_markdown(str(e))}")
 
 
 async def handle_sync(chat_id: str):

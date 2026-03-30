@@ -54,6 +54,7 @@ AVAILABLE_THEMES = [
     "us_recession", "fed_policy", "china_slowdown", "global_flows",
     # Portfolio actions
     "rebalancing_signal", "sip_strategy", "tax_planning",
+    "sector_rotation", "turnaround_story", "dividend_yield", "regulatory_tailwinds", "undervalued"
 ]
 
 CLASSIFICATION_PROMPT = """You are a financial research classifier for an Indian retail investor.
@@ -66,13 +67,15 @@ Analyze this article and return a JSON object with exactly these fields:
   "important_numbers": ["any specific numbers, percentages, or figures mentioned"],
   "themes": ["pick 1-5 from the available themes list that best match"],
   "relevant_asset_classes": ["pick from: equity, mutual_fund, debt, gold, silver, real_estate, crypto — only include what the article actually discusses"],
-  "relevant_sectors": ["list any Indian market sectors mentioned, e.g. IT, Banking, Pharma, FMCG, Auto, Energy, Metals, Realty, Telecom, Infrastructure, Consumer, Healthcare — use empty list if none"],
+  "relevant_sectors": ["Identify ALL Indian market sectors mentioned or impacted, even if they are NOT currently in a standard portfolio. Use standard labels like IT, Banking, Pharma, FMCG, Auto, Energy, Metals, Realty, Telecom, Infrastructure, Consumer, Healthcare, Defense, Chemicals"],
   "sentiment": "bullish" or "bearish" or "neutral" or "mixed",
   "time_horizon": "short_term" or "medium_term" or "long_term",
-  "action_relevance": "high" or "medium" or "low"
+  "action_relevance": "Set to 'high' if the article suggests a clear 'buy/sell' signal, a major sector rotation, or a new emerging opportunity. Set to 'medium' for general updates, and 'low' for noise."
 }}
 
 Available themes: {themes}
+
+Context for 'action_relevance': Focus on 'Discovery'. If an article discusses a sector showing a turnaround or a new policy benefit (e.g., PLI schemes in Electronics), mark it as 'high' relevance even if it is a niche sector.
 
 Article title: {title}
 Source: {source}
@@ -190,63 +193,72 @@ async def compute_portfolio_relevance(
     themes: list[str],
     relevant_asset_classes: list[str],
     relevant_sectors: list[str],
+    sentiment: str
 ) -> tuple[float, list[str], list[str]]:
     """
-    Score how relevant this research item is to the user's actual portfolio.
-
-    Scoring:
-      +0.3 if any theme matches a holding's asset class
-      +0.2 per relevant sector that matches a held stock's sector
-      +0.1 per matched asset class
-
-    Returns (relevance_score, matching_holding_ids, matching_goal_ids)
+    Fuses Research with Analytics to calculate a single 'Actionable Relevance' score.
     """
+    from services.analytics_service import AnalyticsService
     from models.holdings import Holding
-    from models.instruments import AssetClass
-
-    holdings = await Holding.find(Holding.is_active == True).to_list()
+    
+    analytics = AnalyticsService()
+    
+    # Fetch current portfolio state
+    snapshot = await analytics.get_portfolio_snapshot()
+    concentration = await analytics.get_concentration_risk()
+    drift_report = await analytics.get_portfolio_drift()
+    
+    # 1. Map existing exposure for quick lookup
+    # by_asset_class structure: {'equity': {'pct': 55.0, ...}, 'gold': {...}}
+    asset_data = snapshot.get("by_asset_class", {})
+    
+    # Extract sector concentrations from the risk report
+    # sector_values: {'IT': 30.5, 'Banking': 12.0}
+    sector_exposure = {}
+    for risk in concentration.get("risks", []):
+        if risk["type"] == "sector_concentration":
+            sector_exposure[risk["sector"].upper()] = risk["pct"]
 
     score = 0.0
-    relevant_holding_ids = []
+    matching_holding_ids = []
 
-    # Asset class match
-    held_asset_classes = set()
-    held_sectors = set()
+    # --- Pillar 1: Defensive Relevance (Protecting the Heavyweights) ---
+    for sector in [s.upper() for s in relevant_sectors]:
+        current_pct = sector_exposure.get(sector, 0)
+        if current_pct > 20:  # You are heavily exposed
+            if sentiment == "bearish":
+                score += 0.5  # Critical: News is bad for your biggest bet
+            else:
+                score += 0.2  # Relevant: General news on your big holdings
 
-    for h in holdings:
-        await h.fetch_link(Holding.instrument)
-        instrument = h.instrument
-        held_asset_classes.add(instrument.asset_class.value)
-        if instrument.sector:
-            held_sectors.add(instrument.sector.lower())
+    # --- Pillar 2: Strategic Discovery (Finding the Gaps) ---
+    # If a sector is NOT in your exposure list but the news is Bullish
+    held_sectors = {s.upper() for s in sector_exposure.keys()}
+    for sector in [s.upper() for s in relevant_sectors]:
+        if sector not in held_sectors and sentiment == "bullish":
+            score += 0.4  # Discovery Bonus: "Here is something good you don't own"
 
+    # --- Pillar 3: Corrective Drift (Fixing the Balance) ---
+    drift = drift_report.get("drift", {})
     for ac in relevant_asset_classes:
-        if ac in held_asset_classes:
-            score += 0.1
+        ac_drift = drift.get(ac.lower(), {})
+        if ac_drift.get("status") == "underweight" and sentiment == "bullish":
+            score += 0.3  # Rebalancing Bonus: "You need more Gold, and Gold is trending"
 
-    # Sector match
-    for sector in relevant_sectors:
-        if sector.lower() in held_sectors:
-            score += 0.2
-            # Find specific holdings in this sector
-            for h in holdings:
-                if h.instrument.sector and h.instrument.sector.lower() == sector.lower():
-                    relevant_holding_ids.append(str(h.instrument.id))
+    # --- Pillar 4: Goal Alignment (The 'Why') ---
+    # Check if themes match High Impact categories
+    HIGH_IMPACT_THEMES = ["rate_cut", "inflation", "budget", "sebi_policy"]
+    if any(t in themes for t in HIGH_IMPACT_THEMES):
+        score += 0.2
 
-    # Theme-based scoring
-    HIGH_IMPACT_THEMES = {
-        "rate_cut": ["mutual_fund", "debt"],
-        "rate_hike": ["debt", "mutual_fund"],
-        "gold_momentum": ["gold"],
-        "nifty_valuation": ["equity", "mutual_fund"],
-        "it_sector": ["equity"],
-        "banking_sector": ["equity"],
-    }
+    # Final normalization
+    final_score = round(min(score, 1.0), 2)
 
-    for theme in themes:
-        if theme in HIGH_IMPACT_THEMES:
-            impacted = HIGH_IMPACT_THEMES[theme]
-            if any(ac in held_asset_classes for ac in impacted):
-                score += 0.3
+    # Identify specific holdings to "Watch" based on this news
+    active_holdings = await Holding.find(Holding.is_active == True).to_list()
+    for h in active_holdings:
+        await h.fetch_link(Holding.instrument)
+        if h.instrument.sector and h.instrument.sector.upper() in [s.upper() for s in relevant_sectors]:
+            matching_holding_ids.append(str(h.id))
 
-    return round(min(score, 1.0), 2), list(set(relevant_holding_ids)), []
+    return final_score, list(set(matching_holding_ids)), []

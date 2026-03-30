@@ -32,6 +32,10 @@ class ActionType(str, Enum):
     UPLOAD_DOCUMENT = "upload_document"
     REVIEW_POLICY_VIOLATION = "review_policy_violation"
     NO_ACTION = "no_action"
+    # New: Opportunity & Strategy focused
+    NEW_SECTOR_ENTRY = "new_sector_entry"           # For "Scouting" new sectors
+    STRATEGIC_DIVERSIFICATION = "diversify_portfolio" # For fixing concentration via new ideas
+    TAX_OPTIMIZATION = "tax_optimization"           # For harvesting
 
 
 class ActionStatus(str, Enum):
