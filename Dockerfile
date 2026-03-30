@@ -30,4 +30,5 @@ EXPOSE 8080
 # Use the direct exec form to ensure it's PID 1
 # Use the shell form to allow Railway to inject variables if needed
 # We use the shell form to ensure the $PORT variable is injected by Railway
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips='*'
+# Use the python3 module flag to ensure environment consistency
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips", "*"]
