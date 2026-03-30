@@ -53,6 +53,8 @@ MONGO_URI=mongodb+srv://...
 DB_NAME=finance_agent
 ZERODHA_API_KEY=
 ZERODHA_API_SECRET=
+# Leave this blank — it gets written automatically after /zerodha/callback
+ZERODHA_ACCESS_TOKEN=
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 OPENAI_API_KEY=
