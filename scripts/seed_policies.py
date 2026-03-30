@@ -4,7 +4,7 @@ app/scripts/seed_policies.py
 Seeds the Policy Store with sensible default rules.
 Run once after first deployment.
 
-    python -m app.scripts.seed_policies
+    python -m scripts.seed_policies
 """
 
 import asyncio, os, certifi

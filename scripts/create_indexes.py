@@ -6,7 +6,7 @@ The vector search index is created via the Atlas UI or CLI, not the driver —
 see the comment at the bottom of this file.
 
 Run with:
-    python -m app.scripts.create_indexes
+    python -m scripts.create_indexes
 """
 
 import asyncio

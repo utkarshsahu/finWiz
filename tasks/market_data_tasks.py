@@ -42,7 +42,7 @@ async def _run_sync():
         client.close()
 
 
-@celery_app.task(name="app.tasks.market_data_tasks.run_daily_market_sync")
+@celery_app.task(name="tasks.market_data_tasks.run_daily_market_sync")
 def run_daily_market_sync():
     """
     Full market data sync — equities, MF NAVs, commodities, indices.
@@ -80,10 +80,10 @@ def run_daily_market_sync():
 # Register in beat schedule — add to celery_app.conf.beat_schedule in zerodha_tasks.py:
 #
 # "market-data-daily-sync": {
-#     "task": "app.tasks.market_data_tasks.run_daily_market_sync",
+#     "task": "tasks.market_data_tasks.run_daily_market_sync",
 #     "schedule": crontab(hour=18, minute=0),  # 6pm IST
 # },
 # "market-data-retry": {
-#     "task": "app.tasks.market_data_tasks.run_daily_market_sync",
+#     "task": "tasks.market_data_tasks.run_daily_market_sync",
 #     "schedule": crontab(hour=20, minute=30),  # 8:30pm retry
 # },

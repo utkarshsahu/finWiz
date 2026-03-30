@@ -6,7 +6,7 @@ wrong quantity (1000 = face value denomination) instead of actual
 bond count (50 = value / price).
 
 Run once:
-    python -m app.scripts.fix_ncd_holding
+    python -m scripts.fix_ncd_holding
 """
 
 import asyncio, os, certifi

@@ -6,7 +6,7 @@ that don't come through Zerodha or CAS — gold/silver ETFs,
 index trackers, etc.
 
 Run once:
-    python -m app.scripts.seed_instruments
+    python -m scripts.seed_instruments
 """
 
 import asyncio

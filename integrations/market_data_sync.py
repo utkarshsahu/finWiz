@@ -338,7 +338,7 @@ class MarketDataSync:
                     symbol=ticker,
                     name=index_name.replace("_", " ").title(),
                     asset_class=AssetClass.EQUITY,
-                    sub_class=__import__("app.models.instruments", fromlist=["SubClass"]).SubClass.INDEX,
+                    sub_class=__import__("models.instruments", fromlist=["SubClass"]).SubClass.INDEX,
                     exchange=Exchange.NSE,
                     is_active=True,
                 )

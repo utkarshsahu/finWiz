@@ -33,7 +33,7 @@
 ## 📂 Project Structure
 
 ```bash
-app/
+./
 ├── models/         # MongoDB/Beanie schemas (Ledger, Holdings, Signals, etc.)
 ├── integrations/   # Zerodha OAuth, AMFI/NSE fetchers, CAS parsers
 ├── services/       # Analytics, Rules Engine, Telegram Bot, Recommendations
@@ -66,9 +66,9 @@ pip install -r requirements.txt
 
 ### 3. Initialize Database
 ```bash
-python -m app.scripts.create_indexes
-python -m app.scripts.seed_instruments
-python -m app.scripts.seed_policies
+python -m scripts.create_indexes
+python -m scripts.seed_instruments
+python -m scripts.seed_policies
 ```
 
 ---
@@ -77,11 +77,11 @@ python -m app.scripts.seed_policies
 
 1.  **Start the API:**
     ```bash
-    uvicorn app.main:app --reload
+    uvicorn main:app --reload
     ```
 2.  **Start Celery Worker:**
     ```bash
-    celery -A app.tasks.zerodha_tasks.celery_app worker --loglevel=info
+    celery -A tasks.zerodha_tasks.celery_app worker --loglevel=info
     ```
 3.  **Telegram Webhook (Development):**
     Use `ngrok` to expose port 8000 and set the webhook via the `/telegram/set-webhook` endpoint.

@@ -80,7 +80,7 @@ async def _get_db():
 # Tasks
 # ---------------------------------------------------------------------------
 
-@celery_app.task(name="app.tasks.zerodha_tasks.send_login_reminder")
+@celery_app.task(name="tasks.zerodha_tasks.send_login_reminder")
 def send_login_reminder():
     """
     Sends a Telegram message each morning with the Kite login URL.
@@ -113,7 +113,7 @@ def send_login_reminder():
     asyncio.run(_run())
 
 
-@celery_app.task(name="app.tasks.zerodha_tasks.run_daily_sync")
+@celery_app.task(name="tasks.zerodha_tasks.run_daily_sync")
 def run_daily_sync():
     """
     Full sync: holdings + transactions + prices.
@@ -159,7 +159,7 @@ def run_daily_sync():
     asyncio.run(_run())
 
 
-@celery_app.task(name="app.tasks.zerodha_tasks.refresh_prices_only")
+@celery_app.task(name="tasks.zerodha_tasks.refresh_prices_only")
 def refresh_prices_only():
     """
     Lightweight afternoon task — just refresh current_price on holdings.
