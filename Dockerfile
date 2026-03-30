@@ -27,6 +27,4 @@ COPY . .
 # Railway ignores EXPOSE, but it's good for documentation
 EXPOSE 8080
 
-# CRITICAL: Use shell form to allow environment variable expansion ($PORT)
-# If Railway doesn't provide a PORT, it defaults to 8080 for safety
-CMD sh -c "python -m uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"
+CMD python -m uvicorn main:app --host 0.0.0.0 --port 8080

@@ -72,7 +72,7 @@ app.include_router(recommendations_router)
 app.include_router(telegram_router)
 """
 
-@app.get("/health")
+@app.get("/health", tags=["system"])
 async def health():
     return {"status": "ok"}
 
