@@ -1,5 +1,5 @@
 # Use a slim Python 3.10+ image
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Prevent Python from buffering logs (forces logs to appear in Railway instantly)
 ENV PYTHONUNBUFFERED=1
@@ -20,3 +20,7 @@ RUN pip install --no-deps pdfplumber
 
 # Copy the rest of the application code
 COPY . .
+
+EXPOSE 8080
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
