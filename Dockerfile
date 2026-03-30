@@ -27,4 +27,5 @@ COPY . .
 # Railway ignores EXPOSE, but it's good for documentation
 EXPOSE 8080
 
-CMD python -m uvicorn main:app --host 0.0.0.0 --port 8080
+# Use the direct exec form to ensure it's PID 1
+CMD ["python3", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

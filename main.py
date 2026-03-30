@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     
     # We create a task so FastAPI can finish starting up 
     # and stay 'Ready' while the DB finishes its handshake.
-    db_init_task = asyncio.create_task(init_db())
+    #db_init_task = asyncio.create_task(init_db())
     
     def check_db_status(task):
         try:
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logging.error(f"!!! DB Initialization Task Failed: {e} !!!")
 
-    db_init_task.add_done_callback(check_db_status)
+    #db_init_task.add_done_callback(check_db_status)
 
     yield
     
@@ -74,7 +74,7 @@ async def root():
         "docs": "/docs",
         "zerodha_status": "/zerodha/status",
     }
-
+"""
 # 6. Routers (Uncommented and imported)
 from routes.zerodha_router import router as zerodha_router
 from routes.market_data_router import router as market_data_router
@@ -93,3 +93,5 @@ app.include_router(rules_router)
 app.include_router(research_router)
 app.include_router(recommendations_router)
 app.include_router(telegram_router)
+
+"""
