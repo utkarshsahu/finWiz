@@ -48,7 +48,10 @@ async def init_db():
     from models.policies import PolicyRule
     from models.zerodha_token import ZerodhaToken
 
-    _client = AsyncIOMotorClient(MONGO_URI)
+    _client = AsyncIOMotorClient(
+        MONGO_URI,
+        serverSelectionTimeoutMS=5000, # 5 seconds max to find the server
+        connectTimeoutMS=10000)         # 10 seconds max to connect)
 
     # Explicitly get the database object — never pass the client itself
     database = _client[DB_NAME]
