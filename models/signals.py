@@ -46,6 +46,19 @@ class SignalType(str, Enum):
     MARKET_RALLY = "market_rally"
     ASSET_CLASS_MOMENTUM = "asset_class_momentum"
     VALUATION_EXTREME = "valuation_extreme"     # P/E at extreme
+    # Technical / price-based
+    TECHNICAL_DRAWDOWN = "technical_drawdown"           # Price far below 52W high
+    TECHNICAL_MOMENTUM_STRONG = "technical_momentum_strong"  # Near 52W high, review if overweight
+    TECHNICAL_HIGH_VOLATILITY = "technical_high_volatility"  # Annual vol above threshold
+    TECHNICAL_NEAR_52W_LOW = "technical_near_52w_low"   # In bottom band of 52W range
+    # Fundamental
+    FUNDAMENTAL_CONCERN = "fundamental_concern"          # Low ROE, high debt, loss-making P/E
+    # Corporate actions
+    CORPORATE_ACTION_DIVIDEND = "corporate_action_dividend"
+    CORPORATE_ACTION_BONUS = "corporate_action_bonus"
+    CORPORATE_ACTION_SPLIT = "corporate_action_split"
+    CORPORATE_ACTION_RIGHTS = "corporate_action_rights"   # Urgent — decision required
+    CORPORATE_ACTION_BUYBACK = "corporate_action_buyback" # Urgent — tender window
     # Document housekeeping
     DOCUMENT_STALE = "document_stale"
     DOCUMENT_MISSING = "document_missing"

@@ -44,6 +44,16 @@ class Holding(Document):
     unrealized_pnl: Optional[float] = None # current_value - invested_value
     unrealized_pnl_pct: Optional[float] = None
 
+    # --- Technical data (updated on equity sync) ---
+    week52_high: Optional[float] = None
+    week52_low: Optional[float] = None
+    week52_high_date: Optional[str] = None
+    week52_low_date: Optional[str] = None
+    pe_ratio: Optional[float] = None
+    annual_volatility: Optional[float] = None  # % annualised, from NSE
+    vwap: Optional[float] = None
+    day_change_pct: Optional[float] = None
+
     # --- Sync metadata ---
     last_synced_at: datetime = Field(default_factory=datetime.utcnow)
     source_raw: Optional[dict] = None       # Raw payload from Zerodha/CAS for debugging

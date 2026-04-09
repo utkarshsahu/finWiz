@@ -43,6 +43,7 @@ class SubClass(str, Enum):
     SMALL_CAP = "small_cap"
     FLEXI_CAP = "flexi_cap"
     SECTORAL = "sectoral"
+    CONTRA = "contra"
     INTERNATIONAL = "international"
     # Debt sub-classes
     LIQUID = "liquid"

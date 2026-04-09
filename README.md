@@ -10,6 +10,7 @@
 * **Live Market Integration:** Real-time price updates using direct **NSE API** and **AMFI** NAV feeds.
 * **Automated Analytics:** Calculates Net Worth, XIRR (for MF portfolios), Asset Allocation, and Concentration risk.
 * **Intelligent Rules Engine:** Monitors portfolio drift, goal progress, and diversification, generating actionable **Signal** documents.
+* **Technicals & Corporate Actions:** Per-holding technical signals (52W drawdown, near-low, high volatility) sourced from NSE; fundamental concerns (ROE, D/E) from Screener.in; upcoming corporate actions (rights, buybacks, bonuses, splits, dividends) from NSE corporate actions API — surfaced via `/technicals` Telegram command.
 * **Research Pipeline:** Scrapes market news (Mint RSS), processes PDFs, and uses **GPT-4o-mini + OpenAI Embeddings** to categorize relevant financial themes.
 * **AI Weekly Digest:** A **GPT-4o** powered recommendation engine that synthesizes portfolio signals and market research into a prioritized weekly action plan.
 * **Telegram Interface:** A full-featured bot for real-time notifications, portfolio snapshots, and document uploads.

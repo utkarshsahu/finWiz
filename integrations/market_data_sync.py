@@ -238,7 +238,17 @@ class MarketDataSync:
             if needs_save:
                 await instrument.save()
 
-            # 2. Update Price Snapshot & Holding (Your original logic)
+            # 2. Store technicals on holding
+            holding.week52_high = result.week52_high
+            holding.week52_low = result.week52_low
+            holding.week52_high_date = result.week52_high_date
+            holding.week52_low_date = result.week52_low_date
+            holding.pe_ratio = result.pe_ratio
+            holding.annual_volatility = result.annual_volatility
+            holding.vwap = result.vwap
+            holding.day_change_pct = result.day_change_pct
+
+            # 3. Update Price Snapshot & Holding
             await self._upsert_price_snapshot(
                 instrument=instrument,
                 price=result.price,

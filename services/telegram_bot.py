@@ -140,6 +140,7 @@ async def handle_start(chat_id: str):
         "/digest — This week's investment recommendations\n"
         "/snapshot — Current portfolio summary\n"
         "/signals — Active alerts from rules engine\n"
+        "/technicals — Technical + corporate action checks on held equities\n"
         "/sync — Refresh Zerodha + market prices\n"
         "/research — Recent market research\n"
         "/help — Show this message\n\n"
@@ -350,6 +351,99 @@ async def handle_sync(chat_id: str):
         await _send(chat_id, f"❌ Sync error: {e}")
 
 
+async def handle_technicals(chat_id: str):
+    """
+    /technicals — run technical + corporate action checks and surface signals
+    that need the user's attention.
+
+    Only shows signals that warrant a market decision:
+      - TECHNICAL_DRAWDOWN (significant price drop)
+      - TECHNICAL_NEAR_52W_LOW (near bottom)
+      - FUNDAMENTAL_CONCERN (loss-making, weak ROE/D/E)
+      - CORPORATE_ACTION_RIGHTS / BUYBACK (time-sensitive)
+      - CORPORATE_ACTION_BONUS / SPLIT / DIVIDEND (informational)
+
+    TECHNICAL_MOMENTUM_STRONG and TECHNICAL_HIGH_VOLATILITY are INFO-level and
+    are not shown here (they appear in /signals if the user wants them).
+    """
+    await _send(chat_id, "⏳ Running technicals analysis... (may take ~30 seconds)")
+
+    try:
+        from services.rules_engine import RulesEngine
+        from models.signals import Signal, SignalType, SignalSeverity
+
+        engine = RulesEngine()
+        tech_count     = await engine.check_technicals()
+        corp_count     = await engine.check_corporate_actions()
+        total_new      = tech_count + corp_count
+
+        # Pull all active technical + corporate action signals
+        TECHNICAL_TYPES = {
+            SignalType.TECHNICAL_DRAWDOWN,
+            SignalType.TECHNICAL_NEAR_52W_LOW,
+            SignalType.FUNDAMENTAL_CONCERN,
+            SignalType.CORPORATE_ACTION_RIGHTS,
+            SignalType.CORPORATE_ACTION_BUYBACK,
+            SignalType.CORPORATE_ACTION_BONUS,
+            SignalType.CORPORATE_ACTION_SPLIT,
+            SignalType.CORPORATE_ACTION_DIVIDEND,
+        }
+
+        import asyncio
+        all_signals = await asyncio.wait_for(
+            Signal.find_all().to_list(),
+            timeout=15.0
+        )
+
+        relevant = [
+            s for s in all_signals
+            if not s.is_resolved and s.signal_type in TECHNICAL_TYPES
+        ]
+
+        if not relevant:
+            await _send(
+                chat_id,
+                f"✅ *Technicals clean* ({total_new} new signals generated)\n\n"
+                f"No equity holdings need attention right now."
+            )
+            return
+
+        # Sort: urgent first, then by generated_at desc
+        relevant.sort(key=lambda s: (
+            0 if s.severity == SignalSeverity.URGENT else
+            1 if s.severity == SignalSeverity.NORMAL else 2,
+            -s.generated_at.timestamp()
+        ))
+
+        lines = [f"*Technicals — {len(relevant)} signal(s) need attention*\n"]
+
+        urgent  = [s for s in relevant if s.severity == SignalSeverity.URGENT]
+        normal  = [s for s in relevant if s.severity == SignalSeverity.NORMAL]
+
+        if urgent:
+            lines.append("🔴 *Urgent — action required:*")
+            for s in urgent:
+                lines.append(f"  • *{s.title}*")
+                lines.append(f"    {s.description[:140]}")
+                lines.append("")
+
+        if normal:
+            lines.append("🟡 *Review:*")
+            for s in normal:
+                lines.append(f"  • *{s.title}*")
+                lines.append(f"    {s.description[:140]}")
+                lines.append("")
+
+        if total_new:
+            lines.append(f"\n_{total_new} new signal(s) added to /signals_")
+
+        await _send_long(chat_id, "\n".join(lines))
+
+    except Exception as e:
+        logger.error(f"handle_technicals error: {e}")
+        await _send(chat_id, f"❌ Error running technicals: {str(e)[:200]}")
+
+
 async def handle_research(chat_id: str):
     try:
         from models.research import ResearchItem
@@ -514,6 +608,8 @@ async def handle_update(update: dict):
         await handle_signals(chat_id)
     elif text.startswith("/sync"):
         await handle_sync(chat_id)
+    elif text.startswith("/technicals"):
+        await handle_technicals(chat_id)
     elif text.startswith("/research"):
         await handle_research(chat_id)
     elif text.startswith("/help"):

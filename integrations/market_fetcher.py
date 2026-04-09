@@ -67,9 +67,19 @@ class PriceFetchResult:
         ticker: str,
         price: Optional[float],
         price_date: Optional[date],
-        sector: Optional[str] = None, # Added field
-        industry: Optional[str] = None, # Added field
-        company_name: Optional[str] = None, # Added field
+        sector: Optional[str] = None,
+        industry: Optional[str] = None,
+        company_name: Optional[str] = None,
+        # 52W range
+        week52_high: Optional[float] = None,
+        week52_low: Optional[float] = None,
+        week52_high_date: Optional[str] = None,
+        week52_low_date: Optional[str] = None,
+        # Technicals from NSE
+        pe_ratio: Optional[float] = None,
+        annual_volatility: Optional[float] = None,
+        vwap: Optional[float] = None,
+        day_change_pct: Optional[float] = None,
         error: Optional[str] = None,
     ):
         self.ticker = ticker
@@ -78,6 +88,14 @@ class PriceFetchResult:
         self.sector = sector
         self.industry = industry
         self.company_name = company_name
+        self.week52_high = week52_high
+        self.week52_low = week52_low
+        self.week52_high_date = week52_high_date
+        self.week52_low_date = week52_low_date
+        self.pe_ratio = pe_ratio
+        self.annual_volatility = annual_volatility
+        self.vwap = vwap
+        self.day_change_pct = day_change_pct
         self.error = error
         self.success = price is not None and price > 0
 
@@ -234,13 +252,48 @@ async def _fetch_nse_equity(symbol: str) -> PriceFetchResult:
     except Exception:
         trade_date = date.today()
 
+    # --- Extract technicals from priceInfo ---
+    week_high_low = price_info.get("weekHighLow", {})
+    week52_high  = week_high_low.get("max")
+    week52_low   = week_high_low.get("min")
+    week52_high_date = week_high_low.get("maxDate")
+    week52_low_date  = week_high_low.get("minDate")
+
+    try:
+        pe_ratio = float(metadata.get("pdSymbolPe") or 0) or None
+    except (TypeError, ValueError):
+        pe_ratio = None
+
+    try:
+        annual_volatility = float(price_info.get("cmAnnualVolatility") or 0) or None
+    except (TypeError, ValueError):
+        annual_volatility = None
+
+    try:
+        vwap = float(price_info.get("vwap") or 0) or None
+    except (TypeError, ValueError):
+        vwap = None
+
+    try:
+        day_change_pct = float(price_info.get("pChange") or 0)
+    except (TypeError, ValueError):
+        day_change_pct = None
+
     return PriceFetchResult(
-        ticker=symbol, 
-        price=float(last_price), 
+        ticker=symbol,
+        price=float(last_price),
         price_date=trade_date,
         sector=sector,
         industry=industry,
-        company_name=company_name
+        company_name=company_name,
+        week52_high=float(week52_high) if week52_high else None,
+        week52_low=float(week52_low) if week52_low else None,
+        week52_high_date=str(week52_high_date) if week52_high_date else None,
+        week52_low_date=str(week52_low_date) if week52_low_date else None,
+        pe_ratio=pe_ratio,
+        annual_volatility=annual_volatility,
+        vwap=vwap,
+        day_change_pct=day_change_pct,
     )
 
 

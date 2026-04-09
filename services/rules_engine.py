@@ -503,6 +503,318 @@ class RulesEngine:
         return created
 
     # ---------------------------------------------------------------------------
+    # Rule 7: Technical signals (per equity holding)
+    # ---------------------------------------------------------------------------
+
+    async def check_technicals(self) -> int:
+        """
+        Inspect technical data stored on each equity/ETF holding after the
+        daily market sync and generate technical signals.
+
+        Thresholds (configurable here):
+          DRAWDOWN     : price ≤ 80% of 52W high  (≥ 20% drawdown)
+          NEAR_52W_LOW : price ≤ 110% of 52W low  (within 10% of 52W low)
+          MOMENTUM     : price ≥ 97% of 52W high  (within 3% of 52W high)
+          HIGH_VOL     : annual_volatility ≥ 40%
+          FUNDAMENTAL  : ROE < 10%, or D/E > 1.5, or negative P/E (from Screener)
+
+        Only equity and ETF holdings are checked — MFs have no NSE technicals.
+        """
+        from models.signals import SignalType, SignalSeverity
+        from models.holdings import Holding
+        from models.instruments import AssetClass
+        from integrations.screener_fetcher import fetch_fundamentals
+        import asyncio
+
+        holdings = await Holding.find({"is_active": True}).to_list()
+        created = 0
+
+        for h in holdings:
+            await h.fetch_link(Holding.instrument)
+            inst = h.instrument
+
+            if inst.asset_class not in (AssetClass.EQUITY, AssetClass.ETF):
+                continue
+
+            price      = h.current_price
+            high52     = h.week52_high
+            low52      = h.week52_low
+            volatility = h.annual_volatility
+            pe         = h.pe_ratio
+            symbol     = inst.symbol
+            name       = inst.short_name or inst.name or symbol
+            inst_id    = str(inst.id)
+
+            # --- Drawdown: ≥ 20% below 52W high ---
+            if price and high52 and high52 > 0:
+                drawdown_pct = ((high52 - price) / high52) * 100
+                if drawdown_pct >= 20:
+                    severity = (
+                        SignalSeverity.URGENT if drawdown_pct >= 35
+                        else SignalSeverity.NORMAL
+                    )
+                    flag = await _upsert_signal(
+                        signal_type=SignalType.TECHNICAL_DRAWDOWN,
+                        severity=severity,
+                        title=f"{name} down {drawdown_pct:.0f}% from 52W high",
+                        description=(
+                            f"{name} is trading at ₹{price:,.0f}, which is "
+                            f"{drawdown_pct:.1f}% below its 52-week high of ₹{high52:,.0f}. "
+                            f"Review whether the thesis is intact or if this is a buying opportunity."
+                        ),
+                        data={
+                            "symbol": symbol,
+                            "price": price,
+                            "week52_high": high52,
+                            "drawdown_pct": round(drawdown_pct, 1),
+                            "week52_high_date": h.week52_high_date,
+                        },
+                        related_instrument_ids=[inst_id],
+                        dedup_context=f"{symbol}:drawdown:20pct",
+                    )
+                    created += flag
+
+            # --- Near 52W low: within 10% of low ---
+            if price and low52 and low52 > 0:
+                from_low_pct = ((price - low52) / low52) * 100
+                if from_low_pct <= 10:
+                    flag = await _upsert_signal(
+                        signal_type=SignalType.TECHNICAL_NEAR_52W_LOW,
+                        severity=SignalSeverity.NORMAL,
+                        title=f"{name} near 52W low ({from_low_pct:.0f}% above)",
+                        description=(
+                            f"{name} is trading at ₹{price:,.0f}, only {from_low_pct:.1f}% "
+                            f"above its 52-week low of ₹{low52:,.0f} "
+                            f"(on {h.week52_low_date or 'unknown date'}). "
+                            f"Consider if the fundamental case still holds."
+                        ),
+                        data={
+                            "symbol": symbol,
+                            "price": price,
+                            "week52_low": low52,
+                            "from_low_pct": round(from_low_pct, 1),
+                            "week52_low_date": h.week52_low_date,
+                        },
+                        related_instrument_ids=[inst_id],
+                        dedup_context=f"{symbol}:near_52w_low",
+                    )
+                    created += flag
+
+            # --- Strong momentum: within 3% of 52W high ---
+            if price and high52 and high52 > 0:
+                from_high_pct = ((high52 - price) / high52) * 100
+                if from_high_pct <= 3:
+                    flag = await _upsert_signal(
+                        signal_type=SignalType.TECHNICAL_MOMENTUM_STRONG,
+                        severity=SignalSeverity.INFO,
+                        title=f"{name} near 52W high — strong momentum",
+                        description=(
+                            f"{name} is trading at ₹{price:,.0f}, within {from_high_pct:.1f}% "
+                            f"of its 52-week high of ₹{high52:,.0f}. "
+                            f"If this is overweight in your portfolio, consider trimming."
+                        ),
+                        data={
+                            "symbol": symbol,
+                            "price": price,
+                            "week52_high": high52,
+                            "from_high_pct": round(from_high_pct, 1),
+                        },
+                        related_instrument_ids=[inst_id],
+                        dedup_context=f"{symbol}:momentum_strong",
+                    )
+                    created += flag
+
+            # --- High volatility: annual vol ≥ 40% ---
+            if volatility and volatility >= 40:
+                flag = await _upsert_signal(
+                    signal_type=SignalType.TECHNICAL_HIGH_VOLATILITY,
+                    severity=SignalSeverity.INFO,
+                    title=f"{name} has high annual volatility ({volatility:.0f}%)",
+                    description=(
+                        f"{name} has an annualised volatility of {volatility:.1f}%, "
+                        f"indicating high price swings. Ensure this aligns with your "
+                        f"risk tolerance for this holding."
+                    ),
+                    data={
+                        "symbol": symbol,
+                        "annual_volatility": volatility,
+                    },
+                    related_instrument_ids=[inst_id],
+                    dedup_context=f"{symbol}:high_vol",
+                )
+                created += flag
+
+            # --- Fundamental concern (P/E negative = loss-making) ---
+            if pe is not None and pe < 0:
+                flag = await _upsert_signal(
+                    signal_type=SignalType.FUNDAMENTAL_CONCERN,
+                    severity=SignalSeverity.NORMAL,
+                    title=f"{name} is loss-making (P/E: {pe:.1f})",
+                    description=(
+                        f"{name} currently has a negative P/E ratio ({pe:.1f}), "
+                        f"indicating the company is not profitable. Review whether "
+                        f"this is a temporary phase or a structural concern."
+                    ),
+                    data={
+                        "symbol": symbol,
+                        "pe_ratio": pe,
+                        "concern": "negative_pe",
+                    },
+                    related_instrument_ids=[inst_id],
+                    dedup_context=f"{symbol}:negative_pe",
+                )
+                created += flag
+
+            # --- Screener fundamentals: ROE, D/E ---
+            # Only run if holding has meaningful value (avoid API calls for tiny positions)
+            if (h.current_value or 0) > 10000:
+                try:
+                    fundamentals = await fetch_fundamentals(symbol)
+                    await asyncio.sleep(1.0)  # rate-limit Screener
+                    if fundamentals.success:
+                        concerns = []
+                        if fundamentals.roe is not None and fundamentals.roe < 10:
+                            concerns.append(f"ROE {fundamentals.roe:.1f}% (below 10%)")
+                        if fundamentals.debt_to_equity is not None and fundamentals.debt_to_equity > 1.5:
+                            concerns.append(f"D/E {fundamentals.debt_to_equity:.2f} (above 1.5)")
+                        if concerns:
+                            flag = await _upsert_signal(
+                                signal_type=SignalType.FUNDAMENTAL_CONCERN,
+                                severity=SignalSeverity.NORMAL,
+                                title=f"{name}: fundamental concern",
+                                description=(
+                                    f"{name} has the following fundamental concerns: "
+                                    f"{', '.join(concerns)}. "
+                                    f"Source: Screener.in"
+                                ),
+                                data={
+                                    "symbol": symbol,
+                                    "roe": fundamentals.roe,
+                                    "debt_to_equity": fundamentals.debt_to_equity,
+                                    "price_to_book": fundamentals.price_to_book,
+                                    "concerns": concerns,
+                                },
+                                related_instrument_ids=[inst_id],
+                                dedup_context=f"{symbol}:fundamental_concern",
+                            )
+                            created += flag
+                except Exception as e:
+                    logger.warning(f"Screener fetch failed for {symbol}: {e}")
+
+        logger.info(f"check_technicals: {created} new signals")
+        return created
+
+    # ---------------------------------------------------------------------------
+    # Rule 8: Corporate actions
+    # ---------------------------------------------------------------------------
+
+    async def check_corporate_actions(self) -> int:
+        """
+        Check NSE for upcoming/recent corporate actions on held equities.
+
+        Signal priority:
+          - rights / buyback  → URGENT  (time-sensitive decision required)
+          - bonus / split     → NORMAL  (informational, affects cost basis)
+          - dividend          → INFO    (credit expected, low urgency)
+        """
+        from models.signals import SignalType, SignalSeverity
+        from models.holdings import Holding
+        from models.instruments import AssetClass
+        from integrations.nse_corporate_actions import fetch_corporate_actions
+        import asyncio
+
+        TYPE_TO_SIGNAL = {
+            "rights":   (SignalType.CORPORATE_ACTION_RIGHTS,   SignalSeverity.URGENT),
+            "buyback":  (SignalType.CORPORATE_ACTION_BUYBACK,  SignalSeverity.URGENT),
+            "bonus":    (SignalType.CORPORATE_ACTION_BONUS,    SignalSeverity.NORMAL),
+            "split":    (SignalType.CORPORATE_ACTION_SPLIT,    SignalSeverity.NORMAL),
+            "dividend": (SignalType.CORPORATE_ACTION_DIVIDEND, SignalSeverity.INFO),
+        }
+
+        holdings = await Holding.find({"is_active": True}).to_list()
+        created  = 0
+
+        for h in holdings:
+            await h.fetch_link(Holding.instrument)
+            inst = h.instrument
+
+            if inst.asset_class not in (AssetClass.EQUITY, AssetClass.ETF):
+                continue
+
+            symbol  = inst.symbol
+            name    = inst.short_name or inst.name or symbol
+            inst_id = str(inst.id)
+
+            try:
+                actions = await fetch_corporate_actions(symbol)
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                logger.warning(f"Corp action fetch failed for {symbol}: {e}")
+                continue
+
+            for action in actions:
+                if not action.is_upcoming():
+                    continue
+
+                signal_type, severity = TYPE_TO_SIGNAL.get(
+                    action.action_type,
+                    (SignalType.CORPORATE_ACTION_DIVIDEND, SignalSeverity.INFO),
+                )
+
+                action_label = action.action_type.title()
+                ref_date = action.ex_date or action.record_date
+                date_str  = str(ref_date) if ref_date else "upcoming"
+
+                # Rights / buyback: deadline-oriented title
+                if action.action_type in ("rights", "buyback"):
+                    title = f"{name}: {action_label} — action required by {date_str}"
+                    description = (
+                        f"{name} has an upcoming {action_label} (ex-date: {date_str}). "
+                        f"You must decide before the ex-date. Details: {action.subject}"
+                    )
+                elif action.action_type == "split":
+                    title = f"{name}: Stock split on {date_str}"
+                    description = (
+                        f"{name} will undergo a stock split (ex-date: {date_str}). "
+                        f"Your quantity will change — no action required but update your records. "
+                        f"Details: {action.subject}"
+                    )
+                elif action.action_type == "bonus":
+                    title = f"{name}: Bonus issue on {date_str}"
+                    description = (
+                        f"{name} has announced a bonus issue (ex-date: {date_str}). "
+                        f"Your holdings will increase proportionally. "
+                        f"Details: {action.subject}"
+                    )
+                else:  # dividend
+                    title = f"{name}: Dividend (ex-date {date_str})"
+                    description = (
+                        f"{name} has an upcoming dividend (ex-date: {date_str}). "
+                        f"Hold before ex-date to receive it. Details: {action.subject}"
+                    )
+
+                flag = await _upsert_signal(
+                    signal_type=signal_type,
+                    severity=severity,
+                    title=title,
+                    description=description,
+                    data={
+                        "symbol": symbol,
+                        "action_type": action.action_type,
+                        "subject": action.subject,
+                        "ex_date": str(action.ex_date) if action.ex_date else None,
+                        "record_date": str(action.record_date) if action.record_date else None,
+                        **action.details,
+                    },
+                    related_instrument_ids=[inst_id],
+                    dedup_context=f"{symbol}:{action.action_type}:{date_str}",
+                )
+                created += flag
+
+        logger.info(f"check_corporate_actions: {created} new signals")
+        return created
+
+    # ---------------------------------------------------------------------------
     # Run all rules
     # ---------------------------------------------------------------------------
 
@@ -518,12 +830,14 @@ class RulesEngine:
         snapshot = await analytics.get_portfolio_snapshot()
 
         results = {
-            "allocation_drift":   await self.check_allocation_drift(snapshot),
-            "concentration":      await self.check_concentration(snapshot),
-            "document_staleness": await self.check_document_staleness(),
-            "policy_violations":  await self.check_policy_violations(snapshot),
-            "goal_progress":      await self.check_goal_progress(),
-            "data_freshness":     await self.check_data_freshness(),
+            "allocation_drift":    await self.check_allocation_drift(snapshot),
+            "concentration":       await self.check_concentration(snapshot),
+            "document_staleness":  await self.check_document_staleness(),
+            "policy_violations":   await self.check_policy_violations(snapshot),
+            "goal_progress":       await self.check_goal_progress(),
+            "data_freshness":      await self.check_data_freshness(),
+            "technicals":          await self.check_technicals(),
+            "corporate_actions":   await self.check_corporate_actions(),
         }
 
         total_created = sum(results.values())
