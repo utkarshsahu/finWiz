@@ -32,6 +32,9 @@ class PolicyRuleType(str, Enum):
     MAX_EQUITY_PCT = "max_equity_pct"
     MIN_DEBT_PCT = "min_debt_pct"
     MAX_GOLD_PCT = "max_gold_pct"
+    # Target allocation (used by drift check — one rule per asset class)
+    # parameters: {"asset_class": "mutual_fund", "target_pct": 55, "drift_normal_pct": 7, "drift_urgent_pct": 12}
+    TARGET_ALLOCATION_PCT = "target_allocation_pct"
     # Liquidity rules
     MIN_EMERGENCY_FUND_MONTHS = "min_emergency_fund_months"
     MIN_LIQUID_ASSETS_PCT = "min_liquid_assets_pct"
@@ -113,6 +116,36 @@ DEFAULT_POLICIES = [
         "title": "Short-term goals in low-risk assets only",
         "description": "Goals with target dates under 3 years should be funded only by debt/liquid instruments",
         "parameters": {"short_horizon_years": 3, "allowed_asset_classes": ["debt", "cash", "liquid"]},
+        "severity": "normal",
+    },
+    # Target allocation — one rule per asset class.
+    # Edit target_pct in MongoDB (policies collection) to update your targets without redeploying.
+    {
+        "rule_type": PolicyRuleType.TARGET_ALLOCATION_PCT,
+        "title": "Target: Mutual Fund 55%",
+        "description": "Target allocation for mutual funds (equity + hybrid MFs)",
+        "parameters": {"asset_class": "mutual_fund", "target_pct": 55, "drift_normal_pct": 7, "drift_urgent_pct": 12},
+        "severity": "normal",
+    },
+    {
+        "rule_type": PolicyRuleType.TARGET_ALLOCATION_PCT,
+        "title": "Target: Equity 30%",
+        "description": "Target allocation for direct equity (Zerodha holdings)",
+        "parameters": {"asset_class": "equity", "target_pct": 30, "drift_normal_pct": 7, "drift_urgent_pct": 12},
+        "severity": "normal",
+    },
+    {
+        "rule_type": PolicyRuleType.TARGET_ALLOCATION_PCT,
+        "title": "Target: Debt 10%",
+        "description": "Target allocation for debt instruments (bonds, NCDs, FDs)",
+        "parameters": {"asset_class": "debt", "target_pct": 10, "drift_normal_pct": 5, "drift_urgent_pct": 10},
+        "severity": "normal",
+    },
+    {
+        "rule_type": PolicyRuleType.TARGET_ALLOCATION_PCT,
+        "title": "Target: Gold 5%",
+        "description": "Target allocation for gold (ETF, SGB, physical)",
+        "parameters": {"asset_class": "gold", "target_pct": 5, "drift_normal_pct": 4, "drift_urgent_pct": 8},
         "severity": "normal",
     },
 ]

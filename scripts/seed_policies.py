@@ -39,20 +39,33 @@ async def seed():
         ],
     )
 
-    created = 0
+    created = updated = 0
     for policy_data in DEFAULT_POLICIES:
-        existing = await PolicyRule.find_one(
-            PolicyRule.rule_type == policy_data["rule_type"]
-        )
-        if existing:
-            print(f"  skip  {policy_data['title']}")
-            continue
-        policy = PolicyRule(**policy_data)
-        await policy.insert()
-        print(f"  created  {policy_data['title']}")
-        created += 1
+        # For TARGET_ALLOCATION_PCT, match by rule_type + asset_class (one per asset class).
+        # For all others, match by rule_type alone.
+        from models.policies import PolicyRuleType
+        if policy_data["rule_type"] == PolicyRuleType.TARGET_ALLOCATION_PCT:
+            query = {
+                "rule_type": policy_data["rule_type"],
+                "parameters.asset_class": policy_data["parameters"]["asset_class"],
+            }
+        else:
+            query = {"rule_type": policy_data["rule_type"]}
 
-    print(f"\nDone: {created} policies seeded.")
+        existing = await PolicyRule.find_one(query)
+        if existing:
+            for k, v in policy_data.items():
+                setattr(existing, k, v)
+            await existing.save()
+            print(f"  updated  {policy_data['title']}")
+            updated += 1
+        else:
+            policy = PolicyRule(**policy_data)
+            await policy.insert()
+            print(f"  created  {policy_data['title']}")
+            created += 1
+
+    print(f"\nDone: {created} created, {updated} updated.")
     client.close()
 
 

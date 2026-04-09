@@ -78,13 +78,15 @@ class RulesEngine:
     def __init__(self, target_allocation: Optional[dict] = None):
         """
         target_allocation: dict of {asset_class: target_pct}
-        If None, reads from PolicyRule documents or uses defaults.
+        If None, reads TARGET_ALLOCATION_PCT PolicyRule documents at runtime,
+        falling back to these defaults if none are found in the DB.
         """
-        self.target_allocation = target_allocation or {
-            "equity": 50,
-            "mutual_fund": 30,
+        self._override_allocation = target_allocation
+        self._fallback_allocation = {
+            "equity": 30,
+            "mutual_fund": 55,
             "debt": 10,
-            "gold": 10,
+            "gold": 5,
         }
         self.signals_created = 0
         self.signals_skipped = 0
@@ -92,7 +94,41 @@ class RulesEngine:
     async def _load_policies(self) -> list:
         """Load active policy rules from DB."""
         from models.policies import PolicyRule
-        return await PolicyRule.find(PolicyRule.is_active == True).to_list()
+        return await PolicyRule.find({"is_active": True}).to_list()
+
+    async def _load_target_allocation(self) -> tuple[dict, dict]:
+        """
+        Returns (target_pct_by_class, thresholds_by_class).
+        Reads TARGET_ALLOCATION_PCT rules from DB; falls back to _fallback_allocation.
+        thresholds_by_class: {asset_class: {"normal": x, "urgent": y}}
+        """
+        if self._override_allocation:
+            targets = self._override_allocation
+            thresholds = {ac: {"normal": 7.0, "urgent": 12.0} for ac in targets}
+            return targets, thresholds
+
+        from models.policies import PolicyRule, PolicyRuleType
+        rules = await PolicyRule.find(
+            {"rule_type": PolicyRuleType.TARGET_ALLOCATION_PCT, "is_active": True}
+        ).to_list()
+
+        if not rules:
+            targets = self._fallback_allocation
+            thresholds = {ac: {"normal": 7.0, "urgent": 12.0} for ac in targets}
+            return targets, thresholds
+
+        targets = {}
+        thresholds = {}
+        for rule in rules:
+            ac = rule.parameters.get("asset_class")
+            if not ac:
+                continue
+            targets[ac] = rule.parameters.get("target_pct", 0)
+            thresholds[ac] = {
+                "normal": rule.parameters.get("drift_normal_pct", 7.0),
+                "urgent": rule.parameters.get("drift_urgent_pct", 12.0),
+            }
+        return targets, thresholds
 
     # ---------------------------------------------------------------------------
     # Rule 1: Allocation drift
@@ -101,36 +137,38 @@ class RulesEngine:
     async def check_allocation_drift(self, snapshot: dict) -> int:
         """
         Flag if any asset class has drifted more than threshold from target.
-        Default threshold: 7% (urgent if > 12%).
+        Thresholds and targets are loaded from TARGET_ALLOCATION_PCT PolicyRule documents.
         """
         from models.signals import SignalType, SignalSeverity
 
         by_ac = snapshot.get("by_asset_class", {})
-        total = snapshot.get("total_value", 0)
         created = 0
 
-        DRIFT_NORMAL_THRESHOLD = 7.0
-        DRIFT_URGENT_THRESHOLD = 12.0
+        target_allocation, thresholds = await self._load_target_allocation()
 
-        for asset_class, target_pct in self.target_allocation.items():
+        for asset_class, target_pct in target_allocation.items():
             current_pct = by_ac.get(asset_class, {}).get("pct", 0)
             drift = current_pct - target_pct
 
-            if abs(drift) < DRIFT_NORMAL_THRESHOLD:
+            drift_normal = thresholds.get(asset_class, {}).get("normal", 7.0)
+            drift_urgent = thresholds.get(asset_class, {}).get("urgent", 12.0)
+
+            if abs(drift) < drift_normal:
                 continue
 
             direction = "overweight" if drift > 0 else "underweight"
             severity = (
-                SignalSeverity.URGENT if abs(drift) >= DRIFT_URGENT_THRESHOLD
+                SignalSeverity.URGENT if abs(drift) >= drift_urgent
                 else SignalSeverity.NORMAL
             )
+            display_class = asset_class.replace("_", " ").title()
 
             created_flag = await _upsert_signal(
                 signal_type=SignalType.ALLOCATION_DRIFT,
                 severity=severity,
-                title=f"{asset_class.title()} allocation {direction} by {abs(drift):.1f}%",
+                title=f"{display_class} allocation {direction} by {abs(drift):.1f}%",
                 description=(
-                    f"Your {asset_class} allocation is {current_pct:.1f}% "
+                    f"Your {display_class} allocation is {current_pct:.1f}% "
                     f"vs target {target_pct:.1f}% — a drift of {drift:+.1f}%. "
                     f"Consider rebalancing."
                 ),
@@ -189,11 +227,16 @@ class RulesEngine:
                 else SignalSeverity.NORMAL
             )
 
-            # Use short_name if available, else truncate full name
-            display_name = (
-                h.instrument.short_name
-                or h.instrument.name[:40]
-            )
+            # Prefer short_name; fall back to name unless it's a raw numeric code
+            # (AMFI scheme codes get stored as name when instrument isn't fully seeded)
+            if h.instrument.short_name:
+                display_name = h.instrument.short_name
+            elif h.instrument.name and not h.instrument.name.strip().isdigit():
+                display_name = h.instrument.name[:40]
+            elif h.instrument.fund_house:
+                display_name = f"{h.instrument.fund_house} Fund"
+            else:
+                display_name = h.instrument.symbol
             created_flag = await _upsert_signal(
                 signal_type=SignalType.CONCENTRATION_BREACH,
                 severity=severity,

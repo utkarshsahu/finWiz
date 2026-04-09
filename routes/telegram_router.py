@@ -9,29 +9,38 @@ Endpoints:
   GET  /telegram/status     → Check bot status
 """
 
+import asyncio
+import logging
 import os
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 router = APIRouter(prefix="/telegram", tags=["telegram"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/webhook")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
     """
     Telegram sends all updates here via webhook.
-    Returns immediately to Telegram, processes in background.
-    Telegram requires a response within 5 seconds — background task
-    ensures we never time out even for slow operations like /digest.
+    Returns 200 immediately — Telegram requires a response within 5 seconds.
+    The update is processed in a FastAPI background task so slow commands
+    (/sync, /digest) never cause Telegram to retry and double-execute.
     """
     try:
         update = await request.json()
-        from services.telegram_bot import handle_update
-        await handle_update(update)
-        return {"ok": True}
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Webhook parse error: {e}")
+        logger.error(f"Webhook parse error: {e}")
         return {"ok": True}
+
+    async def _run():
+        try:
+            from services.telegram_bot import handle_update
+            await handle_update(update)
+        except Exception as e:
+            logger.error(f"Webhook handler error: {e}")
+
+    background_tasks.add_task(_run)
+    return {"ok": True}
 
 
 @router.post("/set-webhook")
